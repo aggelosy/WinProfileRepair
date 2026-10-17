@@ -1,0 +1,9 @@
+dist/
+dist-*/
+artifacts/
+*.user
+*.suo
+*.pdb
+scan-report*.json
+Backups/
+TestResults/

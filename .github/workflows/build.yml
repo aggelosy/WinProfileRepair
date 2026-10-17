@@ -1,0 +1,26 @@
+name: Build and test Windows utility
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build, test, and package
+        shell: powershell
+        run: ./package.ps1
+      - name: Upload preview packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: WinProfileRepair-preview-win-x64
+          if-no-files-found: error
+          path: |
+            dist/WinProfileRepair.exe
+            dist/*.zip
+            dist/SHA256SUMS.txt
