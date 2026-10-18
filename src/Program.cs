@@ -22,7 +22,7 @@ namespace WinProfileRepair
                     {
                         string destination = Path.GetFullPath(args[1]);
                         if (File.Exists(destination)) throw new IOException("The report already exists; choose a new filename.");
-                        ScanReport report = ScanEngine.Scan();
+                        ScanReport report = WorkspaceScanner.Scan(System.Threading.CancellationToken.None, null);
                         JavaScriptSerializer serializer = new JavaScriptSerializer();
                         serializer.MaxJsonLength = 16 * 1024 * 1024;
                         using (FileStream output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None))

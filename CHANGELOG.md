@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0-preview (development)
+
+- Implemented the selected Workspace layout with Overview, Diagnostics, Repair history, Backups, and session Settings.
+- Added structured evidence, proposed changes, backup/undo conditions, and verification guidance in the inspector.
+- Added bounded read-only inspection of per-user preview/icon/context-menu handlers, startup registrations, Startup-folder inventory, and user PATH/TEMP/TMP values.
+- Added per-module coverage and partial-inspection status, scan progress, and cancellation between core modules and within the expanded modules.
+- Added private operation history and compatibility summaries for older backup journals. History metadata never authorizes a repair or restore.
+- Added diagnostic verification that checks profile identity, scan chronology, relevant module coverage, and recurring findings at the same target. A finding no longer detected still requires checking the original symptom.
+- Preserved the original repair allowlist, revalidation, backup schema, restore validation, and separate icon-cache operation. New diagnostic findings are never selected for automatic repair.
+- Expanded synthetic tests for parser ambiguity, inaccessible/remote/reparse-point targets, history corruption and persistence, verification, legacy backup summaries, and Workspace navigation/rendering.
+
 ## 0.2.0-preview
 
 - Redesigned the desktop interface with a neutral workspace, dark navigation rail, compact summary cards, and a dedicated evidence inspector.

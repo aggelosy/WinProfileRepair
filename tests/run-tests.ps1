@@ -4,7 +4,7 @@ $artifacts=Join-Path $root 'artifacts'
 New-Item -ItemType Directory -Path $artifacts -Force|Out-Null
 $compiler=Join-Path ([Environment]::GetFolderPath('Windows')) 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $sources=@(Get-ChildItem -LiteralPath (Join-Path $root 'src') -Filter '*.cs' -File | Select-Object -ExpandProperty FullName)
-$sources+=Join-Path $PSScriptRoot 'TestProgram.cs'
+$sources+=@(Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.cs' -File | Sort-Object Name | Select-Object -ExpandProperty FullName)
 $arguments=@('/nologo','/target:exe','/main:TestProgram','/platform:x64','/optimize+','/warn:4','/warnaserror+',('/out:'+(Join-Path $artifacts 'WinProfileRepair.Tests.exe')),'/reference:System.dll','/reference:System.Core.dll','/reference:System.Drawing.dll','/reference:System.Windows.Forms.dll','/reference:System.Web.Extensions.dll','/reference:System.Management.dll')
 $arguments+=('/win32icon:'+(Join-Path $root 'assets\app.ico'))
 & $compiler @arguments @sources

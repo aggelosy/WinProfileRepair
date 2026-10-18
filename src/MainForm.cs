@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
@@ -19,6 +20,32 @@ namespace WinProfileRepair
         private readonly Label statusLabel = new Label();
         private readonly Label stateLabel = new Label();
         private readonly ProgressBar progress = new ProgressBar();
+        private readonly ThemeButton cancelScanButton = new ThemeButton();
+        private readonly ThemeButton restoreSelectedButton = new ThemeButton();
+        private readonly ThemeButton verifyButton = new ThemeButton();
+        private readonly NavButton overviewNav = new NavButton();
+        private readonly NavButton diagnosticsNav = new NavButton();
+        private readonly NavButton historyNav = new NavButton();
+        private readonly NavButton backupsNav = new NavButton();
+        private readonly NavButton settingsNav = new NavButton();
+        private readonly Panel pageHost = new Panel();
+        private readonly Label pageTitle = new Label();
+        private readonly Label pageDescription = new Label();
+        private readonly Label breadcrumb = new Label();
+        private readonly Label overviewSummary = new Label();
+        private readonly Label historySummary = new Label();
+        private readonly Label backupsSummary = new Label();
+        private readonly ListView moduleList = new ListView();
+        private readonly ListView historyList = new ListView();
+        private readonly ListView backupList = new ListView();
+        private readonly TextBox historyDetails = new TextBox();
+        private readonly TextBox backupDetails = new TextBox();
+        private readonly CheckBox technicalDetails = new CheckBox();
+        private readonly NumericUpDown detailTextSize = new NumericUpDown();
+        private readonly Dictionary<string, Control> pages = new Dictionary<string, Control>();
+        private CancellationTokenSource scanCancellation;
+        private string activePage = "Overview";
+        private List<RepairHistoryItem> history = new List<RepairHistoryItem>();
         private readonly DataGridView findingsGrid;
         private readonly DataGridView reviewGrid;
         private readonly DataGridView imageGrid;
@@ -43,6 +70,7 @@ namespace WinProfileRepair
         private int activeSection;
 
         internal int ActiveSection { get { return activeSection; } }
+        internal string ActivePage { get { return activePage; } }
 
         public MainForm()
         {
@@ -67,6 +95,12 @@ namespace WinProfileRepair
             findingsNav.Name = "FindingsNav";
             reviewNav.Name = "ReviewNav";
             imageNav.Name = "ImageIconsNav";
+            cancelScanButton.Name = "CancelScan";
+            overviewNav.Name = "OverviewNav";
+            diagnosticsNav.Name = "DiagnosticsNav";
+            historyNav.Name = "HistoryNav";
+            backupsNav.Name = "BackupsNav";
+            settingsNav.Name = "SettingsNav";
 
             var shell = new TableLayoutPanel();
             shell.Dock = DockStyle.Fill;
@@ -74,7 +108,7 @@ namespace WinProfileRepair
             shell.Padding = Padding.Empty;
             shell.ColumnCount = 2;
             shell.RowCount = 1;
-            shell.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 212));
+            shell.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200));
             shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             Controls.Add(shell);
@@ -91,6 +125,8 @@ namespace WinProfileRepair
             };
             statusLabel.Text = "Run a read-only scan to inspect this Windows profile.";
             SelectSection(0);
+            RefreshHistory();
+            SelectPage("Overview");
             UpdateButtons();
         }
 
@@ -107,9 +143,11 @@ namespace WinProfileRepair
             sidebarLayout.Margin = Padding.Empty;
             sidebarLayout.ColumnCount = 1;
             sidebarLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            sidebarLayout.RowCount = 8;
+            sidebarLayout.RowCount = 10;
             sidebarLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
             sidebarLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+            sidebarLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            sidebarLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             sidebarLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             sidebarLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             sidebarLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
@@ -141,12 +179,16 @@ namespace WinProfileRepair
             sidebarLayout.Controls.Add(brand, 0, 0);
 
             sidebarLayout.Controls.Add(SidebarCaption("WORKSPACE"), 0, 1);
-            ConfigureNav(findingsNav, "Findings", "findings", delegate { SelectSection(0); });
-            ConfigureNav(reviewNav, "Manual review", "review", delegate { SelectSection(1); });
-            ConfigureNav(imageNav, "Image file icons", "image", delegate { SelectSection(2); });
-            sidebarLayout.Controls.Add(findingsNav, 0, 2);
-            sidebarLayout.Controls.Add(reviewNav, 0, 3);
-            sidebarLayout.Controls.Add(imageNav, 0, 4);
+            ConfigureNav(overviewNav, "Overview", "overview", delegate { SelectPage("Overview"); });
+            ConfigureNav(diagnosticsNav, "Diagnostics", "findings", delegate { SelectPage("Diagnostics"); });
+            ConfigureNav(historyNav, "Repair history", "history", delegate { SelectPage("Repair history"); });
+            ConfigureNav(backupsNav, "Backups", "backups", delegate { SelectPage("Backups"); });
+            ConfigureNav(settingsNav, "Settings", "settings", delegate { SelectPage("Settings"); });
+            sidebarLayout.Controls.Add(overviewNav, 0, 2);
+            sidebarLayout.Controls.Add(diagnosticsNav, 0, 3);
+            sidebarLayout.Controls.Add(historyNav, 0, 4);
+            sidebarLayout.Controls.Add(backupsNav, 0, 5);
+            sidebarLayout.Controls.Add(settingsNav, 0, 6);
 
             var utilities = new TableLayoutPanel();
             utilities.Dock = DockStyle.Fill;
@@ -162,7 +204,7 @@ namespace WinProfileRepair
             ConfigureNav(cacheButton, "Rebuild icon cache", "cache", CacheClick);
             utilities.Controls.Add(restoreButton, 0, 1);
             utilities.Controls.Add(cacheButton, 0, 2);
-            sidebarLayout.Controls.Add(utilities, 0, 6);
+            sidebarLayout.Controls.Add(utilities, 0, 8);
 
             var footer = new Label();
             footer.Dock = DockStyle.Fill;
@@ -170,7 +212,7 @@ namespace WinProfileRepair
             footer.Text = "\u25cf  Local processing only\r\n     " + AppInfo.Version;
             footer.Font = new Font("Segoe UI", 8F);
             footer.ForeColor = Color.FromArgb(154, 160, 169);
-            sidebarLayout.Controls.Add(footer, 0, 7);
+            sidebarLayout.Controls.Add(footer, 0, 9);
             return sidebar;
         }
 
@@ -202,26 +244,30 @@ namespace WinProfileRepair
             var layout = new TableLayoutPanel();
             layout.Dock = DockStyle.Fill;
             layout.Margin = Padding.Empty;
-            layout.Padding = new Padding(28, 22, 28, 10);
+            layout.Padding = new Padding(26, 20, 26, 10);
             layout.ColumnCount = 1;
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.RowCount = 6;
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 116));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
+            layout.RowCount = 4;
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 120));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 110));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             layout.Controls.Add(BuildHeader(), 0, 0);
-            layout.Controls.Add(BuildStats(), 0, 1);
-            layout.Controls.Add(BuildFindingsCard(), 0, 3);
-            layout.Controls.Add(BuildActivity(), 0, 4);
-            layout.Controls.Add(BuildStatusBar(), 0, 5);
+            pageHost.Dock = DockStyle.Fill;
+            pageHost.Margin = Padding.Empty;
+            AddPage("Overview", BuildOverview());
+            AddPage("Diagnostics", BuildFindingsCard());
+            AddPage("Repair history", BuildHistoryPage(false));
+            AddPage("Backups", BuildHistoryPage(true));
+            AddPage("Settings", BuildSettings());
+            layout.Controls.Add(pageHost, 0, 1);
+            layout.Controls.Add(BuildActivity(), 0, 2);
+            layout.Controls.Add(BuildStatusBar(), 0, 3);
             layout.SizeChanged += delegate
             {
                 bool compact = layout.ClientSize.Height < 740;
-                layout.RowStyles[0].Height = compact ? 108 : 116;
-                layout.RowStyles[4].Height = compact ? 96 : 132;
+                layout.RowStyles[0].Height = compact ? 112 : 120;
+                layout.RowStyles[2].Height = compact ? 88 : 110;
             };
             return layout;
         }
@@ -234,37 +280,50 @@ namespace WinProfileRepair
             header.ColumnCount = 2;
             header.RowCount = 3;
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 148));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 250));
             header.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
             header.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
             header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            var breadcrumb = new Label();
             breadcrumb.Dock = DockStyle.Fill;
-            breadcrumb.Text = "Workspace  /  Profile diagnostics";
+            breadcrumb.Text = "Workspace  /  Overview";
             breadcrumb.Font = new Font("Segoe UI", 8.5F);
             breadcrumb.ForeColor = UiTheme.Muted;
             breadcrumb.Margin = Padding.Empty;
             header.Controls.Add(breadcrumb, 0, 0);
-            var title = new Label();
-            title.Dock = DockStyle.Fill;
-            title.Text = "Profile diagnostics";
-            title.Font = new Font("Segoe UI Semibold", 25F);
-            title.Margin = new Padding(-2, 0, 0, 0);
-            header.Controls.Add(title, 0, 1);
-            var description = new Label();
-            description.Dock = DockStyle.Fill;
-            description.Text = "Inspect icon registrations and installation remnants in this Windows profile.\r\nScanning is read-only. Repairs are selected by you and backed up first.";
-            description.Font = new Font("Segoe UI", 8.5F);
-            description.ForeColor = UiTheme.Muted;
-            description.Margin = new Padding(0, 3, 0, 0);
-            header.Controls.Add(description, 0, 2);
-            header.SetColumnSpan(description, 2);
+            pageTitle.Name = "WorkspacePageTitle";
+            pageTitle.Dock = DockStyle.Fill;
+            pageTitle.Font = new Font("Segoe UI Semibold", 24F);
+            pageTitle.Margin = new Padding(-2, 0, 0, 0);
+            header.Controls.Add(pageTitle, 0, 1);
+            pageDescription.Dock = DockStyle.Fill;
+            pageDescription.Font = new Font("Segoe UI", 8.5F);
+            pageDescription.ForeColor = UiTheme.Muted;
+            pageDescription.Margin = new Padding(0, 3, 0, 0);
+            header.Controls.Add(pageDescription, 0, 2);
+            header.SetColumnSpan(pageDescription, 2);
             ConfigureButton(scanButton, "Scan profile", ScanClick);
             scanButton.Primary = true;
-            scanButton.Size = new Size(128, 38);
+            scanButton.Size = new Size(130, 38);
             scanButton.Anchor = AnchorStyles.Right | AnchorStyles.Top;
             scanButton.Margin = new Padding(0, 5, 0, 0);
-            header.Controls.Add(scanButton, 1, 1);
+            var scanActions = new FlowLayoutPanel();
+            scanActions.Dock = DockStyle.Fill;
+            scanActions.Margin = Padding.Empty;
+            scanActions.FlowDirection = FlowDirection.RightToLeft;
+            scanActions.WrapContents = false;
+            scanActions.Controls.Add(scanButton);
+            ConfigureButton(cancelScanButton, "Cancel scan", delegate
+            {
+                if (scanCancellation == null) return;
+                scanCancellation.Cancel();
+                cancelScanButton.Enabled = false;
+                statusLabel.Text = "Stopping after the current diagnostic check...";
+            });
+            cancelScanButton.Size = new Size(110, 38);
+            cancelScanButton.Margin = new Padding(0, 5, 7, 0);
+            cancelScanButton.Visible = false;
+            scanActions.Controls.Add(cancelScanButton);
+            header.Controls.Add(scanActions, 1, 1);
             return header;
         }
 
@@ -279,7 +338,7 @@ namespace WinProfileRepair
             stats.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.333F));
             stats.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.334F));
             ConfigureStat(findingsStat, "REPAIRABLE", "Selected repairs only");
-            ConfigureStat(reviewStat, "REVIEW REQUIRED", "Evidence to inspect manually");
+            ConfigureStat(reviewStat, "READ-ONLY ITEMS", "Information and items to investigate");
             ConfigureStat(imageStat, "IMAGE ICONS", "File association diagnostics");
             findingsStat.Margin = new Padding(0, 0, 10, 0);
             reviewStat.Margin = new Padding(0, 0, 10, 0);
@@ -288,6 +347,231 @@ namespace WinProfileRepair
             stats.Controls.Add(reviewStat, 1, 0);
             stats.Controls.Add(imageStat, 2, 0);
             return stats;
+        }
+
+        private void AddPage(string name, Control page)
+        {
+            page.Dock = DockStyle.Fill;
+            page.Margin = Padding.Empty;
+            page.Visible = false;
+            pages.Add(name, page);
+            pageHost.Controls.Add(page);
+        }
+
+        internal void SelectPage(string name)
+        {
+            if (!pages.ContainsKey(name)) throw new ArgumentOutOfRangeException("name");
+            activePage = name;
+            foreach (KeyValuePair<string, Control> page in pages) page.Value.Visible = page.Key == name;
+            pages[name].BringToFront();
+            overviewNav.Selected = name == "Overview";
+            diagnosticsNav.Selected = name == "Diagnostics";
+            historyNav.Selected = name == "Repair history";
+            backupsNav.Selected = name == "Backups";
+            settingsNav.Selected = name == "Settings";
+            breadcrumb.Text = "Workspace  /  " + name;
+            pageTitle.Text = name == "Overview" ? "Your Windows profile" : name;
+            pageDescription.Text = name == "Overview" ? "Understand the cause, review the evidence, and choose the next step.\r\nRead-only scanning first. Nothing is selected for repair by default."
+                : name == "Diagnostics" ? "Inspect each finding with its evidence, proposed change, backup, and verification plan.\r\nConfirmed repair candidates and manual investigation stay separate."
+                : name == "Repair history" ? "Follow recorded operations and their later diagnostic checks.\r\nAn applied repair and a verified result are different states."
+                : name == "Backups" ? "Review backups connected to recorded repairs and restore through the validated recovery flow.\r\nCache rebuilds have no restore backup."
+                : "Adjust how diagnostic evidence is displayed in this session.\r\nReports and backups stay local until you choose to share them.";
+            if (name == "Repair history" || name == "Backups") RefreshHistory();
+            UpdateButtons();
+        }
+
+        private Control BuildOverview()
+        {
+            var layout = new TableLayoutPanel();
+            layout.Dock = DockStyle.Fill;
+            layout.Margin = Padding.Empty;
+            layout.ColumnCount = 1;
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            layout.RowCount = 3;
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            layout.Controls.Add(BuildStats(), 0, 0);
+            overviewSummary.Name = "OverviewSummary";
+            overviewSummary.Dock = DockStyle.Fill;
+            overviewSummary.Margin = new Padding(0, 15, 0, 0);
+            overviewSummary.Text = "Ready when you are. Run a scan to check the diagnostic areas below.";
+            overviewSummary.ForeColor = UiTheme.Muted;
+            layout.Controls.Add(overviewSummary, 0, 1);
+
+            var card = new SurfacePanel();
+            card.Dock = DockStyle.Fill;
+            card.Padding = new Padding(18, 14, 18, 12);
+            card.Margin = Padding.Empty;
+            var content = new TableLayoutPanel();
+            content.Dock = DockStyle.Fill;
+            content.Margin = Padding.Empty;
+            content.ColumnCount = 1;
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            content.RowCount = 3;
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            content.Controls.Add(BodyLabel("Diagnostic coverage", 12F, true), 0, 0);
+            ConfigureList(moduleList, "Diagnostic module coverage");
+            moduleList.Name = "ModuleCoverage";
+            moduleList.Columns.Add("Area", 190);
+            moduleList.Columns.Add("Status", 105);
+            moduleList.Columns.Add("Scope / latest result", 440);
+            moduleList.FullRowSelect = true;
+            moduleList.DoubleClick += delegate { SelectPage("Diagnostics"); };
+            moduleList.KeyDown += delegate(object sender, KeyEventArgs e)
+            {
+                if (e.KeyCode == Keys.Enter) { SelectPage("Diagnostics"); e.Handled = true; }
+            };
+            AddModuleRow("Shell registrations", "Not scanned", "Thumbnail, preview, and context-menu handler registrations.");
+            AddModuleRow("Installation records", "Not scanned", "Evidence-based leftovers and broken Start-menu shortcuts.");
+            AddModuleRow("Image file icons", "Not scanned", "Read-only file association and icon-resource diagnostics.");
+            AddModuleRow("Startup & environment", "Not scanned", "User startup entries, PATH, and temporary-folder configuration.");
+            content.Controls.Add(moduleList, 0, 1);
+            var note = BodyLabel("This preview checks specific causes. Search, folder recovery, and Windows-wide repair are planned.", 8F, false);
+            note.ForeColor = UiTheme.Muted;
+            note.Margin = new Padding(0, 10, 0, 0);
+            content.Controls.Add(note, 0, 2);
+            card.Controls.Add(content);
+            layout.Controls.Add(card, 0, 2);
+            return layout;
+        }
+
+        private void AddModuleRow(string title, string status, string summary)
+        {
+            var row = new ListViewItem(title);
+            row.SubItems.Add(status);
+            row.SubItems.Add(summary);
+            moduleList.Items.Add(row);
+        }
+
+        private static Label BodyLabel(string text, float size, bool strong)
+        {
+            var label = new Label();
+            label.Text = text;
+            label.Dock = DockStyle.Fill;
+            label.Margin = Padding.Empty;
+            label.Font = new Font(strong ? "Segoe UI Semibold" : "Segoe UI", size);
+            return label;
+        }
+
+        private static void ConfigureList(ListView list, string accessibleName)
+        {
+            list.Dock = DockStyle.Fill;
+            list.Margin = Padding.Empty;
+            list.View = View.Details;
+            list.BorderStyle = BorderStyle.None;
+            list.FullRowSelect = true;
+            list.MultiSelect = false;
+            list.HideSelection = false;
+            list.HeaderStyle = ColumnHeaderStyle.Nonclickable;
+            list.BackColor = UiTheme.SurfaceWhite;
+            list.ForeColor = UiTheme.Ink;
+            list.Font = new Font("Segoe UI", 9F);
+            list.AccessibleName = accessibleName;
+        }
+
+        private Control BuildHistoryPage(bool backups)
+        {
+            var card = new SurfacePanel();
+            card.Dock = DockStyle.Fill;
+            card.Margin = Padding.Empty;
+            card.Padding = new Padding(18, 15, 18, 15);
+            var layout = new TableLayoutPanel();
+            layout.Dock = DockStyle.Fill;
+            layout.Margin = Padding.Empty;
+            layout.ColumnCount = 2;
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+            layout.RowCount = 4;
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 52));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 48));
+            Label summary = backups ? backupsSummary : historySummary;
+            summary.Dock = DockStyle.Fill;
+            summary.ForeColor = UiTheme.Muted;
+            summary.Margin = new Padding(0, 7, 12, 0);
+            layout.Controls.Add(summary, 0, 0);
+            ThemeButton action = backups ? restoreSelectedButton : verifyButton;
+            action.Name = backups ? "RestoreSelectedBackup" : "VerifyRepairs";
+            ConfigureButton(action, backups ? "Restore selected backup" : "Scan to verify repairs", backups ? (EventHandler)RestoreSelectedClick : ScanClick);
+            action.Dock = DockStyle.Top;
+            action.Height = 34;
+            action.Margin = Padding.Empty;
+            layout.Controls.Add(action, 1, 0);
+            ListView list = backups ? backupList : historyList;
+            ConfigureList(list, backups ? "Recorded repair backups" : "Recorded repair history");
+            list.Name = backups ? "BackupList" : "RepairHistoryList";
+            list.Columns.Add("When", 145);
+            list.Columns.Add("Operation", 155);
+            list.Columns.Add(backups ? "Backup folder" : "Result", backups ? 340 : 145);
+            if (!backups) list.Columns.Add("Verification", 220);
+            list.SelectedIndexChanged += delegate { ShowHistoryDetails(backups); };
+            layout.Controls.Add(list, 0, 1);
+            layout.SetColumnSpan(list, 2);
+            var caption = BodyLabel(backups ? "BACKUP DETAILS & RESTORE CONDITIONS" : "OPERATION DETAILS & VERIFICATION", 7.5F, true);
+            caption.ForeColor = UiTheme.Muted;
+            caption.Margin = new Padding(0, 10, 0, 0);
+            layout.Controls.Add(caption, 0, 2);
+            layout.SetColumnSpan(caption, 2);
+            TextBox details = backups ? backupDetails : historyDetails;
+            ConfigureTextBox(details);
+            details.Font = new Font("Segoe UI", 9F);
+            details.AccessibleName = backups ? "Selected backup details" : "Selected operation details";
+            layout.Controls.Add(details, 0, 3);
+            layout.SetColumnSpan(details, 2);
+            card.Controls.Add(layout);
+            return card;
+        }
+
+        private Control BuildSettings()
+        {
+            var card = new SurfacePanel();
+            card.Dock = DockStyle.Fill;
+            card.Margin = Padding.Empty;
+            card.Padding = new Padding(24);
+            var content = new TableLayoutPanel();
+            content.Dock = DockStyle.Fill;
+            content.Margin = Padding.Empty;
+            content.ColumnCount = 1;
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            content.RowCount = 7;
+            foreach (int height in new[] { 34, 40, 28, 40, 32, 98 }) content.RowStyles.Add(new RowStyle(SizeType.Absolute, height));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            content.Controls.Add(BodyLabel("Evidence display", 13F, true), 0, 0);
+            technicalDetails.Name = "ShowTechnicalEvidence";
+            technicalDetails.Text = "Show rule IDs, registry paths, and raw evidence";
+            technicalDetails.Checked = true;
+            technicalDetails.Dock = DockStyle.Fill;
+            technicalDetails.Margin = Padding.Empty;
+            technicalDetails.CheckedChanged += delegate { RefreshSection(); ShowHistoryDetails(false); ShowHistoryDetails(true); };
+            content.Controls.Add(technicalDetails, 0, 1);
+            content.Controls.Add(BodyLabel("Evidence and activity text size", 9F, false), 0, 2);
+            detailTextSize.Name = "EvidenceTextSize";
+            detailTextSize.Minimum = 8;
+            detailTextSize.Maximum = 14;
+            detailTextSize.Value = 9;
+            detailTextSize.Width = 90;
+            detailTextSize.Margin = new Padding(0, 2, 0, 10);
+            detailTextSize.ValueChanged += delegate
+            {
+                float size = Convert.ToSingle(detailTextSize.Value);
+                detailsBox.Font = new Font("Segoe UI", size);
+                historyDetails.Font = new Font("Segoe UI", size);
+                backupDetails.Font = new Font("Segoe UI", size);
+                logBox.Font = new Font("Consolas", size);
+            };
+            content.Controls.Add(detailTextSize, 0, 3);
+            var sessionNote = BodyLabel("These display preferences apply to this session only.", 8.5F, false);
+            sessionNote.ForeColor = UiTheme.Muted;
+            content.Controls.Add(sessionNote, 0, 4);
+            var privacy = BodyLabel("LOCAL BY DEFAULT\r\n\r\nRun as your normal Windows user. Scans are read-only; every repair needs your explicit selection. Exported reports may contain user names, paths, and installed application details. Review a report before sharing it.", 9F, false);
+            privacy.ForeColor = UiTheme.Muted;
+            content.Controls.Add(privacy, 0, 5);
+            card.Controls.Add(content);
+            return card;
         }
 
         private static void ConfigureStat(StatCard card, string caption, string footnote)
@@ -314,10 +598,27 @@ namespace WinProfileRepair
             layout.Margin = Padding.Empty;
             layout.ColumnCount = 1;
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.RowCount = 2;
+            layout.RowCount = 3;
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             card.Controls.Add(layout);
+
+            var filters = new TableLayoutPanel();
+            filters.Dock = DockStyle.Fill;
+            filters.Margin = new Padding(12, 5, 12, 0);
+            filters.ColumnCount = 3;
+            filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
+            filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
+            filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36));
+            ConfigureNav(findingsNav, "Findings", "findings", delegate { SelectSection(0); });
+            ConfigureNav(reviewNav, "Review and info", "review", delegate { SelectSection(1); });
+            ConfigureNav(imageNav, "Image file icons", "image", delegate { SelectSection(2); });
+            findingsNav.Light = reviewNav.Light = imageNav.Light = true;
+            filters.Controls.Add(findingsNav, 0, 0);
+            filters.Controls.Add(reviewNav, 1, 0);
+            filters.Controls.Add(imageNav, 2, 0);
+            layout.Controls.Add(filters, 0, 0);
 
             var header = new TableLayoutPanel();
             header.Dock = DockStyle.Fill;
@@ -353,7 +654,7 @@ namespace WinProfileRepair
             repairButton.Margin = new Padding(0, 5, 0, 0);
             header.Controls.Add(repairButton, 2, 0);
             header.SetRowSpan(repairButton, 2);
-            layout.Controls.Add(header, 0, 0);
+            layout.Controls.Add(header, 0, 1);
 
             var split = new SplitContainer();
             split.Size = new Size(900, 400);
@@ -381,7 +682,7 @@ namespace WinProfileRepair
             gridHost.Controls.Add(BuildEmptyState());
             split.Panel1.Controls.Add(gridHost);
             split.Panel2.Controls.Add(BuildInspector());
-            layout.Controls.Add(split, 0, 1);
+            layout.Controls.Add(split, 0, 2);
             return card;
         }
 
@@ -452,7 +753,7 @@ namespace WinProfileRepair
             divider.Margin = Padding.Empty;
             layout.Controls.Add(divider, 0, 3);
             ConfigureTextBox(detailsBox);
-            detailsBox.Font = new Font("Consolas", 8.5F);
+            detailsBox.Font = new Font("Segoe UI", 9F);
             detailsBox.AccessibleName = "Selected finding evidence and proposed action";
             layout.Controls.Add(detailsBox, 0, 4);
             return layout;
@@ -625,6 +926,17 @@ namespace WinProfileRepair
             title.FillWeight = 45;
             title.MinimumWidth = 120;
             grid.Columns.Add(title);
+            if (!selectable)
+            {
+                var classification = new DataGridViewTextBoxColumn();
+                classification.Name = "Classification";
+                classification.HeaderText = "Classification";
+                classification.ReadOnly = true;
+                classification.Width = 120;
+                classification.MinimumWidth = 100;
+                classification.DefaultCellStyle.ForeColor = UiTheme.Muted;
+                grid.Columns.Add(classification);
+            }
             var summary = new DataGridViewTextBoxColumn();
             summary.Name = "Summary";
             summary.HeaderText = selectable ? "Reason for repair" : "Review notes";
@@ -652,24 +964,39 @@ namespace WinProfileRepair
             var finding = grid.CurrentRow.Tag as Finding;
             if (finding == null) return;
             inspectorTitle.Text = finding.Title;
-            inspectorType.Text = finding.CanFix ? "SELECTED, BACKED-UP REPAIR" : "MANUAL REVIEW ONLY";
+            inspectorType.Text = ClassificationLabel(finding);
             var text = new StringBuilder();
-            text.AppendLine(finding.CanFix ? "Eligible for a selected, backed-up repair." : "Review only. This utility will not change this item.");
-            text.AppendLine();
-            text.AppendLine(finding.Summary);
-            text.AppendLine();
-            text.AppendLine("LOCATION");
-            text.AppendLine(finding.Path);
-            text.AppendLine();
             text.AppendLine("EVIDENCE");
-            foreach (string evidence in finding.Evidence) text.AppendLine(evidence + Environment.NewLine);
-            if (finding.MissingTargets.Count != 0)
+            text.AppendLine(finding.Summary);
+            if (technicalDetails.Checked)
             {
-                text.AppendLine();
-                text.AppendLine("MISSING TARGETS");
-                foreach (string target in finding.MissingTargets) text.AppendLine(target + Environment.NewLine);
+                if (!String.IsNullOrEmpty(finding.Category)) text.AppendLine("Area: " + finding.Category);
+                if (!String.IsNullOrEmpty(finding.RuleId)) text.AppendLine("Rule: " + finding.RuleId);
+                text.AppendLine("Location: " + finding.Path);
+                foreach (string evidence in finding.Evidence) text.AppendLine(evidence + Environment.NewLine);
+                if (finding.MissingTargets.Count != 0)
+                {
+                    text.AppendLine("Missing targets:");
+                    foreach (string target in finding.MissingTargets) text.AppendLine(target);
+                }
             }
+            text.AppendLine();
+            text.AppendLine("PROPOSED CHANGE");
+            text.AppendLine(ValueOr(finding.ProposedChange, finding.CanFix ? "Remove only this confirmed stale item after rechecking its evidence. Nothing is applied until you select and confirm the repair." : "Investigation only. This preview will not change this item."));
+            text.AppendLine();
+            text.AppendLine("BACKUP / UNDO");
+            text.AppendLine(ValueOr(finding.BackupPlan, finding.CanFix ? "Save the original item in a local repair backup before changing it. Restore backup validates profile ownership, paths, and conflicts." : "No change is offered, so no repair backup is created."));
+            text.AppendLine();
+            text.AppendLine("VERIFICATION");
+            text.AppendLine(ValueOr(finding.VerificationPlan, "Scan again after any change. A result no longer detected still needs a visual check of the original problem; restart Windows if needed."));
             detailsBox.Text = text.ToString();
+        }
+
+        private static string ValueOr(string value, string fallback) { return String.IsNullOrWhiteSpace(value) ? fallback : value; }
+
+        private static string ClassificationLabel(Finding finding)
+        {
+            return ValueOr(finding.Classification, finding.CanFix ? "Repair available · not selected by default" : "Needs review");
         }
 
         private DataGridView CreateImageGrid()
@@ -715,18 +1042,108 @@ namespace WinProfileRepair
             detailsBox.Text = text.ToString();
         }
 
+        private void RefreshHistory()
+        {
+            try { DisplayHistory(HistoryStore.Read()); }
+            catch (Exception ex)
+            {
+                DisplayHistory(new List<RepairHistoryItem>());
+                historySummary.Text = "Repair history could not be read. Existing backups can still be selected manually.";
+                backupsSummary.Text = "Recorded backup metadata is unavailable. Use Restore backup to choose a folder.";
+                AppendLog("Repair history unavailable: " + ex.Message);
+            }
+        }
+
+        internal void DisplayHistory(List<RepairHistoryItem> entries)
+        {
+            history = entries ?? new List<RepairHistoryItem>();
+            historyList.BeginUpdate();
+            backupList.BeginUpdate();
+            historyList.Items.Clear();
+            backupList.Items.Clear();
+            foreach (RepairHistoryItem entry in history)
+            {
+                if (entry == null) continue;
+                DateTime when;
+                string date = DateTime.TryParse(entry.CreatedUtc, null, System.Globalization.DateTimeStyles.RoundtripKind, out when) ? when.ToLocalTime().ToString("dd MMM yyyy HH:mm") : ValueOr(entry.CreatedUtc, "Unknown time");
+                var row = new ListViewItem(date);
+                row.SubItems.Add(entry.Operation ?? String.Empty);
+                row.SubItems.Add(entry.Status ?? String.Empty);
+                row.SubItems.Add(ValueOr(entry.VerificationState, "Not checked"));
+                row.Tag = entry;
+                historyList.Items.Add(row);
+                if (!String.IsNullOrWhiteSpace(entry.BackupDirectory))
+                {
+                    var backup = new ListViewItem(date);
+                    backup.SubItems.Add(entry.Operation ?? String.Empty);
+                    backup.SubItems.Add(entry.BackupDirectory);
+                    backup.Tag = entry;
+                    backupList.Items.Add(backup);
+                }
+            }
+            historyList.EndUpdate();
+            backupList.EndUpdate();
+            historySummary.Text = historyList.Items.Count == 0 ? "No operations have been recorded by this version yet." : historyList.Items.Count + " recorded operation(s). Select one to review its result.";
+            backupsSummary.Text = backupList.Items.Count == 0 ? "No recorded backups. Earlier backup folders can be selected with Restore backup." : backupList.Items.Count + " recorded backup(s). Validation happens before restore.";
+            ShowHistoryDetails(false);
+            ShowHistoryDetails(true);
+            UpdateButtons();
+        }
+
+        private void ShowHistoryDetails(bool backups)
+        {
+            ListView list = backups ? backupList : historyList;
+            TextBox box = backups ? backupDetails : historyDetails;
+            RepairHistoryItem item = list.SelectedItems.Count == 0 ? null : list.SelectedItems[0].Tag as RepairHistoryItem;
+            if (item == null)
+            {
+                box.Text = backups ? "Select a recorded backup to see its operation and recovery conditions.\r\n\r\nRestore checks ownership, manifest contents, paths, and conflicts. Existing or changed items are not overwritten. The list is metadata; a recorded folder may no longer exist."
+                    : "Select an operation to inspect its result.\r\n\r\nUse Scan to verify repairs to check whether a recorded finding is still detected. Diagnostic absence does not establish that the original visual symptom is fixed. Check the application or taskbar yourself after restarting when appropriate.";
+            }
+            else
+            {
+                var text = new StringBuilder();
+                text.AppendLine(item.Operation + " · " + item.Status);
+                text.AppendLine(item.Summary);
+                text.AppendLine();
+                text.AppendLine("VERIFICATION");
+                text.AppendLine(ValueOr(item.VerificationState, "Not checked"));
+                if (!String.IsNullOrEmpty(item.LastVerifiedUtc)) text.AppendLine("Last diagnostic check (UTC): " + item.LastVerifiedUtc);
+                text.AppendLine();
+                text.AppendLine("BACKUP / UNDO");
+                text.AppendLine(String.IsNullOrWhiteSpace(item.BackupDirectory) ? "No restore backup was recorded for this operation." : item.BackupDirectory);
+                if (backups) text.AppendLine("Restore revalidates this backup and refuses conflicts. Review its manifest and trust its origin before restoring.");
+                if (technicalDetails.Checked && item.Details != null)
+                {
+                    text.AppendLine();
+                    text.AppendLine("OPERATION DETAILS");
+                    foreach (string detail in item.Details) text.AppendLine(detail);
+                }
+                box.Text = text.ToString();
+            }
+            UpdateButtons();
+        }
+
+        private void RestoreSelectedClick(object sender, EventArgs e)
+        {
+            if (busy || backupList.SelectedItems.Count != 1) return;
+            var item = backupList.SelectedItems[0].Tag as RepairHistoryItem;
+            if (item != null && !String.IsNullOrWhiteSpace(item.BackupDirectory)) RestoreFolder(item.BackupDirectory);
+        }
+
         internal void SelectSection(int index)
         {
             if (index < 0 || index > 2) throw new ArgumentOutOfRangeException("index");
             activeSection = index;
+            if (pages.ContainsKey("Diagnostics") && activePage != "Diagnostics") SelectPage("Diagnostics");
             findingsNav.Selected = index == 0;
             reviewNav.Selected = index == 1;
             imageNav.Selected = index == 2;
             findingsGrid.Visible = index == 0;
             reviewGrid.Visible = index == 1;
             imageGrid.Visible = index == 2;
-            sectionTitle.Text = index == 0 ? "Findings" : index == 1 ? "Manual review" : "Image file icons";
-            sectionDescription.Text = index == 0 ? "Review the evidence, then choose individual repairs." : index == 1 ? "Items that require your assessment; no automatic changes." : "Inspect application icon resources and file associations.";
+            sectionTitle.Text = index == 0 ? "Findings" : index == 1 ? "Review and information" : "Image file icons";
+            sectionDescription.Text = index == 0 ? "Review the evidence, then choose individual repairs." : index == 1 ? "Information, observations, and checks that need investigation." : "Inspect application icon resources and file associations.";
             repairButton.Visible = index == 0;
             RefreshSection();
             UpdateButtons();
@@ -775,7 +1192,7 @@ namespace WinProfileRepair
         private void UpdateButtons()
         {
             scanButton.Enabled = !busy;
-            repairButton.Enabled = !busy && activeSection == 0 && SelectedFindings().Count != 0;
+            repairButton.Enabled = !busy && activePage == "Diagnostics" && activeSection == 0 && SelectedFindings().Count != 0;
             exportButton.Enabled = !busy && report != null;
             restoreButton.Enabled = !busy;
             cacheButton.Enabled = !busy;
@@ -785,6 +1202,13 @@ namespace WinProfileRepair
             findingsNav.Enabled = !busy;
             reviewNav.Enabled = !busy;
             imageNav.Enabled = !busy;
+            overviewNav.Enabled = diagnosticsNav.Enabled = historyNav.Enabled = backupsNav.Enabled = settingsNav.Enabled = !busy;
+            historyList.Enabled = backupList.Enabled = moduleList.Enabled = !busy;
+            technicalDetails.Enabled = detailTextSize.Enabled = !busy;
+            restoreSelectedButton.Enabled = !busy && backupList.SelectedItems.Count == 1;
+            verifyButton.Enabled = !busy && history.Count != 0;
+            cancelScanButton.Visible = busy && scanCancellation != null;
+            cancelScanButton.Enabled = busy && scanCancellation != null && !scanCancellation.IsCancellationRequested;
             stateLabel.Text = busy ? "\u25cf  Working" : report == null ? "\u25cf  Ready" : "\u25cf  Scanned";
             progress.Visible = busy;
         }
@@ -811,18 +1235,36 @@ namespace WinProfileRepair
 
         private async void ScanClick(object sender, EventArgs e)
         {
+            if (busy) return;
+            scanCancellation = new CancellationTokenSource();
             SetBusy(true, "Scanning this profile. No changes are being made...");
             try
             {
                 AppendLog("Read-only profile scan started.");
-                var scanned = await Task.Run(() => ScanEngine.Scan());
+                CancellationToken token = scanCancellation.Token;
+                var scanned = await Task.Run(() => WorkspaceScanner.Scan(token, AppendLog));
+                token.ThrowIfCancellationRequested();
                 DisplayReport(scanned);
                 foreach (string note in report.Notes) AppendLog(note);
-                AppendLog("Scan complete. " + findingsGrid.Rows.Count + " eligible finding(s), " + reviewGrid.Rows.Count + " review-only finding(s). Nothing selected for repair.");
+                try { await Task.Run(() => HistoryStore.Verify(scanned, AppendLog)); }
+                catch (Exception ex) { AppendLog("Scan completed, but history verification could not be saved: " + ex.Message); }
+                RefreshHistory();
+                AppendLog("Scan complete. " + findingsGrid.Rows.Count + " eligible finding(s), " + reviewGrid.Rows.Count + " read-only observation(s). Nothing selected for repair.");
                 SetBusy(false, "Scan complete. Review the evidence, then select only the repairs you want.");
             }
+            catch (OperationCanceledException)
+            {
+                AppendLog("Scan cancelled. Partial results were discarded; no repairs were made.");
+                SetBusy(false, "Scan cancelled. Any displayed results belong to the earlier completed scan.");
+            }
             catch (Exception ex) { ShowFailure("Scan failed", ex); }
-            finally { if (busy) SetBusy(false, "Scan did not complete. See the log."); }
+            finally
+            {
+                scanCancellation.Dispose();
+                scanCancellation = null;
+                if (busy) SetBusy(false, "Scan did not complete. See the log.");
+                else UpdateButtons();
+            }
         }
 
         internal void DisplayReport(ScanReport scanned)
@@ -836,7 +1278,7 @@ namespace WinProfileRepair
                 DataGridView grid = finding.CanFix ? findingsGrid : reviewGrid;
                 int index = finding.CanFix
                     ? grid.Rows.Add(false, finding.Title, finding.Summary)
-                    : grid.Rows.Add(finding.Title, finding.Summary);
+                    : grid.Rows.Add(finding.Title, ClassificationLabel(finding), finding.Summary);
                 grid.Rows[index].Tag = finding;
             }
             foreach (ImageIconDiagnostic icon in report.ImageIcons)
@@ -847,7 +1289,11 @@ namespace WinProfileRepair
             findingsNav.BadgeText = findingsStat.Value = findingsGrid.Rows.Count.ToString();
             reviewNav.BadgeText = reviewStat.Value = reviewGrid.Rows.Count.ToString();
             imageNav.BadgeText = imageStat.Value = imageGrid.Rows.Count.ToString();
-            RefreshSection();
+            moduleList.Items.Clear();
+            foreach (DiagnosticModuleResult module in report.Modules)
+                AddModuleRow(module.Title, module.Status, module.Summary);
+            overviewSummary.Text = "Latest completed scan: " + findingsGrid.Rows.Count + " repair candidate(s), " + reviewGrid.Rows.Count + " read-only observation(s). No repairs selected.";
+            SelectSection(0);
             UpdateButtons();
         }
 
@@ -867,9 +1313,10 @@ namespace WinProfileRepair
             SetBusy(true, "Backing up and repairing the selected items...");
             try
             {
-                OperationResult result = await Task.Run(() => RepairEngine.Apply(selected, AppendLog));
+                OperationResult result = await Task.Run(() => WorkspaceOperations.Apply(selected, AppendLog));
                 ShowResult("Selected repairs", result);
                 ClearScan("Repair operation finished. Scan again to inspect the current state.");
+                RefreshHistory();
             }
             catch (Exception ex) { ShowFailure("Repair failed", ex); ClearScan("Repair failed. Review the log, then scan again."); }
             finally { SetBusy(false, statusLabel.Text); }
@@ -897,7 +1344,7 @@ namespace WinProfileRepair
             }
         }
 
-        private async void RestoreClick(object sender, EventArgs e)
+        private void RestoreClick(object sender, EventArgs e)
         {
             string folder;
             using (var dialog = new FolderBrowserDialog())
@@ -909,13 +1356,20 @@ namespace WinProfileRepair
                 if (dialog.ShowDialog(this) != DialogResult.OK) return;
                 folder = dialog.SelectedPath;
             }
+            RestoreFolder(folder);
+        }
+
+        private async void RestoreFolder(string folder)
+        {
+            if (busy) return;
             if (MessageBox.Show(this, "Restore backed-up items from this folder?\r\n\r\n" + folder + "\r\n\r\nExisting or changed items will not be overwritten. Restore only backups you trust and created for this Windows profile.", "Review backup restore", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;
             SetBusy(true, "Validating and restoring the selected backup...");
             try
             {
-                OperationResult result = await Task.Run(() => RepairEngine.Restore(folder, AppendLog));
+                OperationResult result = await Task.Run(() => WorkspaceOperations.Restore(folder, AppendLog));
                 ShowResult("Backup restore", result);
                 ClearScan("Restore operation finished. Scan again to inspect the current state.");
+                RefreshHistory();
             }
             catch (Exception ex) { ShowFailure("Restore failed", ex); ClearScan("Restore failed. Review the log, then scan again."); }
             finally { SetBusy(false, statusLabel.Text); }
@@ -927,9 +1381,10 @@ namespace WinProfileRepair
             SetBusy(true, "Rebuilding this profile's icon cache. Explorer may disappear temporarily...");
             try
             {
-                OperationResult result = await Task.Run(() => RepairEngine.RebuildIconCache(AppendLog));
+                OperationResult result = await Task.Run(() => WorkspaceOperations.RebuildIconCache(AppendLog));
                 ShowResult("Icon-cache rebuild", result);
                 statusLabel.Text = "Icon-cache operation finished. Check your taskbar and review the log.";
+                RefreshHistory();
             }
             catch (Exception ex) { ShowFailure("Icon-cache rebuild failed", ex); statusLabel.Text = "Icon-cache rebuild failed. See the log."; }
             finally { SetBusy(false, statusLabel.Text); }
@@ -943,6 +1398,12 @@ namespace WinProfileRepair
             imageGrid.Rows.Clear();
             findingsNav.BadgeText = reviewNav.BadgeText = imageNav.BadgeText = String.Empty;
             findingsStat.Value = reviewStat.Value = imageStat.Value = "\u2014";
+            moduleList.Items.Clear();
+            AddModuleRow("Shell registrations", "Not scanned", "Thumbnail, preview, and context-menu handler registrations.");
+            AddModuleRow("Installation records", "Not scanned", "Evidence-based leftovers and broken Start-menu shortcuts.");
+            AddModuleRow("Image file icons", "Not scanned", "Read-only file association and icon-resource diagnostics.");
+            AddModuleRow("Startup & environment", "Not scanned", "User startup entries, PATH, and temporary-folder configuration.");
+            overviewSummary.Text = "The profile may have changed. Run a new scan before reviewing repairs.";
             RefreshSection();
             inspectorTitle.Text = "Scan again to continue";
             inspectorType.Text = "PROFILE STATE MAY HAVE CHANGED";

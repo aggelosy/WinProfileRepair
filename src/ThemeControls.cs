@@ -14,7 +14,8 @@ namespace WinProfileRepair
         internal static readonly Color Border = Color.FromArgb(225, 224, 220);
         internal static readonly Color Sidebar = Color.FromArgb(30, 33, 38);
         internal static readonly Color SidebarText = Color.FromArgb(215, 217, 220);
-        internal static readonly Color Accent = Color.FromArgb(40, 44, 50);
+        internal static readonly Color Accent = Color.FromArgb(49, 95, 114);
+        internal static readonly Color AccentTint = Color.FromArgb(234, 241, 243);
         internal static readonly Color Success = Color.FromArgb(44, 111, 88);
         internal static readonly Color Warning = Color.FromArgb(145, 97, 28);
 
@@ -111,6 +112,8 @@ namespace WinProfileRepair
         private bool hovered;
         private string badgeText;
         private string glyph;
+        private bool light;
+        public bool Light { get { return light; } set { light = value; Invalidate(); } }
         public bool Selected { get { return selected; } set { selected = value; Invalidate(); } }
         public string BadgeText { get { return badgeText; } set { badgeText = value; Invalidate(); } }
         public string Glyph { get { return glyph; } set { glyph = value; Invalidate(); } }
@@ -132,11 +135,11 @@ namespace WinProfileRepair
         {
             e.Graphics.Clear(Parent == null ? UiTheme.Sidebar : Parent.BackColor);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            Color fill = selected ? Color.FromArgb(54, 58, 65) : hovered && Enabled ? Color.FromArgb(42, 46, 52) : UiTheme.Sidebar;
-            Color ink = !Enabled ? Color.FromArgb(112, 117, 125) : selected ? Color.White : UiTheme.SidebarText;
+            Color fill = light ? (selected ? UiTheme.AccentTint : hovered && Enabled ? Color.FromArgb(244, 245, 243) : UiTheme.SurfaceWhite) : selected ? Color.FromArgb(54, 58, 65) : hovered && Enabled ? Color.FromArgb(42, 46, 52) : UiTheme.Sidebar;
+            Color ink = !Enabled ? Color.FromArgb(112, 117, 125) : light ? (selected ? UiTheme.Accent : UiTheme.Muted) : selected ? Color.White : UiTheme.SidebarText;
             using (GraphicsPath path = UiTheme.Rounded(new RectangleF(0, 0, Width - 1, Height - 1), 4))
             using (SolidBrush brush = new SolidBrush(fill)) e.Graphics.FillPath(brush, path);
-            if (selected) using (SolidBrush line = new SolidBrush(Color.FromArgb(220, 222, 225))) e.Graphics.FillRectangle(line, 0, 12, 2, Height - 24);
+            if (selected) using (SolidBrush line = new SolidBrush(light ? UiTheme.Accent : Color.FromArgb(220, 222, 225))) e.Graphics.FillRectangle(line, 0, 12, 2, Height - 24);
             float dpiScale = e.Graphics.DpiX / 96f;
             int glyphSize = (int)(16 * dpiScale);
             DrawGlyph(e.Graphics, glyph, new Rectangle((int)(13 * dpiScale), (Height - glyphSize) / 2, glyphSize, glyphSize), ink);
@@ -148,7 +151,7 @@ namespace WinProfileRepair
                 int badgeHeight = (int)(22 * dpiScale);
                 Rectangle badge = new Rectangle(Width - badgeWidth - (int)(9 * dpiScale), (Height - badgeHeight) / 2, badgeWidth, badgeHeight);
                 using (GraphicsPath path = UiTheme.Rounded(badge, 3))
-                using (SolidBrush brush = new SolidBrush(selected ? Color.FromArgb(77, 82, 90) : Color.FromArgb(43, 47, 53))) e.Graphics.FillPath(brush, path);
+                using (SolidBrush brush = new SolidBrush(light ? Color.FromArgb(224, 233, 236) : selected ? Color.FromArgb(77, 82, 90) : Color.FromArgb(43, 47, 53))) e.Graphics.FillPath(brush, path);
                 TextRenderer.DrawText(e.Graphics, badgeText, Font, badge, ink, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
             if (Focused && ShowFocusCues) ControlPaint.DrawFocusRectangle(e.Graphics, new Rectangle(4, 4, Width - 9, Height - 9), ink, fill);
@@ -161,7 +164,25 @@ namespace WinProfileRepair
             using (Pen pen = new Pen(color, 1.2f))
             {
                 pen.StartCap = LineCap.Round; pen.EndCap = LineCap.Round; pen.LineJoin = LineJoin.Round;
-                if (name == "findings")
+                if (name == "overview")
+                {
+                    graphics.DrawRectangle(pen, 1, 1, 5, 5); graphics.DrawRectangle(pen, 10, 1, 5, 5);
+                    graphics.DrawRectangle(pen, 1, 10, 5, 5); graphics.DrawRectangle(pen, 10, 10, 5, 5);
+                }
+                else if (name == "history")
+                {
+                    graphics.DrawEllipse(pen, 1, 1, 14, 14); graphics.DrawLine(pen, 8, 4, 8, 8); graphics.DrawLine(pen, 8, 8, 11, 10);
+                }
+                else if (name == "backups")
+                {
+                    graphics.DrawRectangle(pen, 2, 5, 12, 10); graphics.DrawRectangle(pen, 1, 1, 14, 4); graphics.DrawLine(pen, 6, 9, 10, 9);
+                }
+                else if (name == "settings")
+                {
+                    graphics.DrawLine(pen, 1, 4, 15, 4); graphics.DrawLine(pen, 1, 12, 15, 12);
+                    graphics.DrawEllipse(pen, 4, 1, 5, 6); graphics.DrawEllipse(pen, 8, 9, 5, 6);
+                }
+                else if (name == "findings")
                 {
                     graphics.DrawRectangle(pen, 1, 1, 14, 14);
                     graphics.DrawLine(pen, 5, 5, 12, 5); graphics.DrawLine(pen, 5, 8, 12, 8); graphics.DrawLine(pen, 5, 11, 10, 11);
