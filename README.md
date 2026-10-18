@@ -1,16 +1,16 @@
 # WinProfileRepair
 
-A small Windows desktop utility for inspecting and repairing a limited set of broken icon registrations and installation leftovers in the current user profile.
+A Windows desktop workspace for diagnosing profile problems and applying a limited set of evidence-based, backed-up repairs.
 
 Made by Aggelos Yiannakou · 2026
 
-**Current version: 0.2.0-preview.** The updated interface uses a quiet workspace, dark navigation, summary cards, and an evidence inspector. Scan and repair behavior and the backup format are unchanged from 0.1.0-preview.
+**Current preview: [0.3.0-preview](https://github.com/aggelosy/WinProfileRepair/releases/tag/v0.3.0-preview).** The Workspace layout adds Overview, Diagnostics, Repair history, Backups, and Settings. Expanded shell and startup/environment diagnostics are read-only. The original repair permissions and backup format remain unchanged.
 
 ![WinProfileRepair desktop interface](assets/screenshot.png)
 
 The screenshot uses illustrative findings. The application starts with an empty workspace until you choose to scan.
 
-**Preview:** the target platform is Windows 10/11 x64 with .NET Framework 4.8. This first version has been evaluated on one Windows machine. Broader compatibility needs independent testing. It is not a complete Windows health check or an uninstaller.
+**Preview:** the target platform is Windows 10/11 x64 with .NET Framework 4.8. This preview has been evaluated on one Windows machine. Broader compatibility needs independent testing. It is not a complete Windows health check or an uninstaller.
 
 The application starts without scanning or changing anything. Scan results include the evidence for each finding. Repairs require an explicit selection, a review dialog, and a backup. Findings that need manual review are shown separately and cannot be selected for repair.
 
@@ -29,6 +29,10 @@ Microsoft documents [thumbnail-provider registration](https://learn.microsoft.co
 ## Scope
 
 The scan checks direct current-user extension thumbnail overrides, current-user and machine uninstall records in both registry views, and `.lnk` files under the current user's Start Menu. A missing target is evidence to inspect; it does not automatically prove that an application should be uninstalled.
+
+The Workspace adds bounded, read-only inspection of direct current-user preview/icon/context-menu handler registrations, HKCU Run/RunOnce entries, the Startup folder, and stored user PATH/TEMP/TMP values. It does not activate third-party COM handlers, execute startup commands, expand stored values against a potentially stale process environment, or test remote targets. Unsupported, inaccessible, and reparse-point paths do not establish absence. Environment references and ambiguous startup commands remain information or review items.
+
+Overview shows which modules completed and which were only partially inspected. A completed module describes its limited checks; it is not a general Windows health certification. All newly added diagnostic findings remain unselectable for repair. Search, Store-app recovery, known-folder recovery, profile migration, and Windows-wide troubleshooting are future modules; see [ROADMAP.md](ROADMAP.md).
 
 For thumbnail repairs, the selected override must have no child keys, its COM class must be absent from the checked classic and packaged COM registrations, and Windows' standard image fallback must point to an existing Windows DLL. Supported repair extensions are `.png`, `.bmp`, `.jpg`, `.jpeg`, `.gif`, `.tif`, and `.tiff`. Other extensions are review-only. Unknown thumbnail providers are never activated during scanning.
 
@@ -55,12 +59,20 @@ The utility does not:
 ## Use
 
 1. Run `WinProfileRepair.exe` as your normal Windows user. Do not choose **Run as administrator**. Profile repairs are intentionally blocked when the application is elevated.
-2. Click **Scan profile**. This is read-only.
-3. Use the sidebar to switch between findings, manual review, and image file icons. Select a finding to read its evidence and proposed action in the inspector. Check only the repairable items you want changed; all checkboxes start unchecked. Manual-review items require investigation outside this utility.
+2. Start on **Overview**, then click **Scan profile**. The scan reads Windows configuration without repairing it. **Cancel scan** is checked between core modules and during the expanded modules; an individual Windows call may need to finish first. Cancelled partial results are discarded.
+3. Open **Diagnostics** and switch between findings, manual review, and image file icons. Select a finding to read its evidence, proposed change, backup/undo conditions, and verification plan. Check only the repairable items you want changed; all checkboxes start unchecked. Manual-review items require investigation outside this utility.
 4. Click **Repair selected** and review the exact list. The engine rechecks the evidence before each change and refuses items that have changed or no longer qualify. An operation may stop before any changes or report individual items it could not repair.
 5. Scan again to inspect the result. If icon registrations are corrected but icons remain stale, use **Rebuild icon cache** after reading its separate confirmation. Restart Windows yourself if needed, then check the icons again.
 
 **Export scan report** saves a JSON file only where you choose. Reports may contain your user SID, user name, local paths, and installed application details. Review and redact a report before attaching it to a public issue. Do not upload backup folders or personal diagnostic captures.
+
+## Repair history and verification
+
+**Repair history** separates an operation being applied from its original symptom being fixed. A completed interactive scan can update local history to **Finding still detected**, **Check incomplete**, or **No longer detected; visual check needed**. It checks only the relevant completed diagnostic modules, refuses older or foreign-profile scans, and compares target paths as well as finding identities so a recurring fault with changed contents is not reported as clear.
+
+Verification updates only this utility's local history metadata; it does not repair Windows. You must still check the affected app, taskbar, or file yourself. Reopen the utility and scan again after restarting Windows to recheck the finding; no scheduled task or automatic background scan is installed. The command-line report mode does not update history.
+
+History metadata is stored under `%LOCALAPPDATA%\WinProfileRepair\History` and can contain private paths and operation messages. Keep it private along with backups. **Backups** also shows read-only summaries of older compatible backup journals. A listed backup may have been moved or deleted; restore always revalidates the actual backup and never trusts the history summary as authorization. **Settings** adjusts evidence detail and text size for the current session.
 
 ## Backup and restore
 
@@ -109,9 +121,9 @@ Read the build and test scripts before running them. Tests are designed to exerc
 
 ## Releases and contributing
 
-The project is published at [aggelosy/WinProfileRepair](https://github.com/aggelosy/WinProfileRepair). Download the current preview from [v0.2.0-preview](https://github.com/aggelosy/WinProfileRepair/releases/tag/v0.2.0-preview), or browse [all releases](https://github.com/aggelosy/WinProfileRepair/releases).
+The project is published at [aggelosy/WinProfileRepair](https://github.com/aggelosy/WinProfileRepair). Published versions are available on [the releases page](https://github.com/aggelosy/WinProfileRepair/releases). Development-branch builds may contain changes that have not yet been published as a release.
 
-Download `WinProfileRepair-v0.2.0-preview-win-x64.zip`, extract it, and run `WinProfileRepair.exe` as your normal Windows user. The release also includes a separate source ZIP and `SHA256SUMS.txt` with SHA-256 checksums for the executable and both ZIP packages. The corresponding source is tagged `v0.2.0-preview` so you can review or build it yourself. Keep personal diagnostics, registry exports, logs, and backup data private.
+Download a versioned `win-x64.zip`, extract it, and run `WinProfileRepair.exe` as your normal Windows user. Release packages include a separate source ZIP and `SHA256SUMS.txt` with SHA-256 checksums for the executable and both ZIP packages. Build artifacts are also generated by GitHub Actions for branches and pull requests. Keep personal diagnostics, registry exports, logs, history, and backup data private.
 
 The preview executable is unsigned. Windows or SmartScreen may display a warning. Review the source, build it yourself if preferred, and follow your organization's software policy. Code signing and wider Windows testing are release improvements, not claims made by this preview.
 

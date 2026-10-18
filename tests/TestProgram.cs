@@ -260,7 +260,11 @@ internal static class TestProgram
             PolicyTests();
             BackupTests();
             DetectionTests(artifacts);
+            assertions += EnvironmentDiagnosticTests.Run(artifacts);
+            assertions += ShellDiagnosticTests.Run(artifacts);
+            assertions += HistoryTests.Run(artifacts);
             UiSmoke(artifacts);
+            assertions += WorkspaceUiTests.Run(artifacts);
             Console.WriteLine("PASS: " + assertions + " assertions. No profile repairs, registry writes, or Explorer restarts were executed.");
             return 0;
         }

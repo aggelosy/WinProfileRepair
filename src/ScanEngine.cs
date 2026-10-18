@@ -9,6 +9,7 @@ using System.Security;
 using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
+using System.Threading;
 using Microsoft.Win32;
 
 namespace WinProfileRepair
@@ -233,6 +234,12 @@ namespace WinProfileRepair
 
         public static ScanReport Scan()
         {
+            return Scan(CancellationToken.None, null);
+        }
+
+        public static ScanReport Scan(CancellationToken cancellation, Action<string> progress)
+        {
+            cancellation.ThrowIfCancellationRequested();
             ScanReport report = new ScanReport();
             report.ApplicationVersion = AppInfo.Version;
             report.ScannedAtUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
@@ -240,12 +247,65 @@ namespace WinProfileRepair
             catch (SecurityException) { report.Notes.Add("The current user SID could not be read."); }
             report.Notes.Add("Read-only scan: direct per-user extension thumbnail overrides, installed-program records, and current-user Start Menu .lnk files. No unknown COM providers are activated.");
             report.Notes.Add("Machine records, MSI packages, drivers, services, application folders, advertised shortcuts, and network paths are never automatically cleaned. Installation records do not prove that an application is unused.");
-            ScanThumbnailOverrides(report);
-            ScanUninstallRecords(report);
-            ScanShortcuts(report);
-            ImageAssociationScanner.Scan(report);
+            ScanStage(report, "thumbnail-overrides", "Image thumbnail overrides", "Shell & appearance", ScanThumbnailOverrides, cancellation, progress);
+            ScanStage(report, "installation-records", "Installation records", "Apps & startup", ScanUninstallRecords, cancellation, progress);
+            ScanStage(report, "start-menu-shortcuts", "Start Menu shortcuts", "Apps & startup", ScanShortcuts, cancellation, progress);
+            ScanStage(report, "image-associations", "Image file associations", "Files & folders", ImageAssociationScanner.Scan, cancellation, progress);
             report.Notes.Add("This scan does not inventory every installation mechanism or every shell registration. No data is transmitted; exported reports can contain local file paths and should be reviewed before sharing.");
             return report;
+        }
+
+        private static void ScanStage(ScanReport report, string id, string title, string category,
+            Action<ScanReport> scan, CancellationToken cancellation, Action<string> progress)
+        {
+            cancellation.ThrowIfCancellationRequested();
+            if (progress != null) progress("Inspecting " + title.ToLowerInvariant() + "...");
+            int notesBefore = report.Notes.Count;
+            int findingsBefore = report.Findings.Count;
+            int imagesBefore = report.ImageIcons.Count;
+            scan(report);
+            cancellation.ThrowIfCancellationRequested();
+            DiagnosticModuleResult module = new DiagnosticModuleResult { Id = id, Title = title, Category = category, Status = "Completed" };
+            for (int index = notesBefore; index < report.Notes.Count; index++)
+            {
+                string note = report.Notes[index];
+                module.Notes.Add(note);
+            }
+            if (StageHasInspectionGap(report, notesBefore, findingsBefore, imagesBefore))
+            {
+                module.Status = "Partial";
+                module.Notes.Add("Some checks could not be fully inspected. Review finding evidence and image diagnostic notes for the affected scope.");
+            }
+            module.Summary = (report.Findings.Count - findingsBefore).ToString(CultureInfo.InvariantCulture) +
+                " finding(s). " + (module.Status == "Completed" ? "No inspection failure was reported within this limited module." : "Some checks were skipped or could not complete; absence of findings does not establish a healthy configuration.");
+            report.Modules.Add(module);
+        }
+
+        internal static bool StageHasInspectionGap(ScanReport report, int notesBefore, int findingsBefore, int imagesBefore)
+        {
+            for (int index = notesBefore; index < report.Notes.Count; index++)
+                if (IsInspectionGapText(report.Notes[index])) return true;
+            for (int index = findingsBefore; index < report.Findings.Count; index++)
+            {
+                Finding finding = report.Findings[index];
+                if (IsInspectionGapText(finding.Summary)) return true;
+                foreach (string evidence in finding.Evidence) if (IsInspectionGapText(evidence)) return true;
+            }
+            for (int index = imagesBefore; index < report.ImageIcons.Count; index++)
+            {
+                ImageIconDiagnostic image = report.ImageIcons[index];
+                if (image.Status == "Warning") return true;
+                foreach (string note in image.Notes) if (IsInspectionGapText(note)) return true;
+            }
+            return false;
+        }
+
+        private static bool IsInspectionGapText(string text)
+        {
+            if (String.IsNullOrEmpty(text)) return false;
+            foreach (string phrase in new[] { "could not", "skipped", "unavailable", "not scanned", "not verified", "inaccessible", "unable to inspect" })
+                if (text.IndexOf(phrase, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
         }
 
         private static void ScanThumbnailOverrides(ScanReport report)

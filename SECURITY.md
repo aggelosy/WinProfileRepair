@@ -14,4 +14,6 @@ Repairs require an unelevated process, explicit selection, evidence revalidation
 
 Exported reports and backups can contain private Windows account and application information. Keep them local unless you have reviewed and redacted them. The application does not automatically upload them or collect telemetry.
 
+The Workspace also stores private operation metadata under `%LOCALAPPDATA%\WinProfileRepair\History`. A completed interactive scan can update this history, but it does not change Windows configuration. History and backup summaries are descriptive metadata: restore uses the original validated backup, and repair uses fresh live evidence. Corrupted or foreign-account history is not a source of authorization. A clear diagnostic check does not prove that every symptom has been fixed.
+
 The initial preview has been evaluated on one machine. No supported security-update schedule or long-term support commitment has been established.

@@ -10,7 +10,7 @@ $arguments=@('/nologo','/target:winexe','/platform:x64','/optimize+','/warn:4','
 $arguments+=('/win32icon:'+(Join-Path $PSScriptRoot 'assets\app.ico'))
 & $compiler @arguments @sources
 if($LASTEXITCODE -ne 0){throw ('Build failed with exit code '+$LASTEXITCODE)}
-foreach($file in @('README.md','LICENSE','SECURITY.md')){
+foreach($file in @('README.md','LICENSE','SECURITY.md','CHANGELOG.md','ROADMAP.md')){
   Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $destination $file) -Force
 }
 $screenshot=Join-Path $PSScriptRoot 'assets\screenshot.png'

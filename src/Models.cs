@@ -38,6 +38,12 @@ namespace WinProfileRepair
         public List<string> Evidence { get; set; }
         public List<string> MissingTargets { get; set; }
         public RegistrySnapshot Snapshot { get; set; }
+        public string Category { get; set; }
+        public string RuleId { get; set; }
+        public string Classification { get; set; }
+        public string ProposedChange { get; set; }
+        public string BackupPlan { get; set; }
+        public string VerificationPlan { get; set; }
         public Finding() { Evidence = new List<string>(); MissingTargets = new List<string>(); }
     }
 
@@ -49,7 +55,39 @@ namespace WinProfileRepair
         public List<Finding> Findings { get; set; }
         public List<string> Notes { get; set; }
         public List<ImageIconDiagnostic> ImageIcons { get; set; }
-        public ScanReport() { Findings = new List<Finding>(); Notes = new List<string>(); ImageIcons = new List<ImageIconDiagnostic>(); }
+        public List<DiagnosticModuleResult> Modules { get; set; }
+        public ScanReport() { Findings = new List<Finding>(); Notes = new List<string>(); ImageIcons = new List<ImageIconDiagnostic>(); Modules = new List<DiagnosticModuleResult>(); }
+    }
+
+    public sealed class DiagnosticModuleResult
+    {
+        public string Id { get; set; }
+        public string Title { get; set; }
+        public string Category { get; set; }
+        public string Status { get; set; }
+        public string Summary { get; set; }
+        public List<string> Notes { get; set; }
+        public DiagnosticModuleResult() { Notes = new List<string>(); }
+    }
+
+    public sealed class RepairHistoryItem
+    {
+        public string Id { get; set; }
+        public string CreatedUtc { get; set; }
+        public string Operation { get; set; }
+        public string Status { get; set; }
+        public string Summary { get; set; }
+        public string BackupDirectory { get; set; }
+        public List<string> Details { get; set; }
+        public string VerificationState { get; set; }
+        public List<string> FindingIds { get; set; }
+        public List<string> FindingFingerprints { get; set; }
+        public List<string> FindingPaths { get; set; }
+        public List<string> RequiredModules { get; set; }
+        public string LastVerifiedUtc { get; set; }
+        public string UserSid { get; set; }
+        public string SchemaVersion { get; set; }
+        public RepairHistoryItem() { Details = new List<string>(); FindingIds = new List<string>(); FindingFingerprints = new List<string>(); FindingPaths = new List<string>(); RequiredModules = new List<string>(); }
     }
 
     public sealed class ImageIconDiagnostic
@@ -76,7 +114,7 @@ namespace WinProfileRepair
     public static class AppInfo
     {
         public const string Name = "WinProfileRepair";
-        public const string Version = "0.2.0-preview";
+        public const string Version = "0.3.0-preview";
         public const string ThumbnailHandler = "{E357FCCD-A995-4576-B01F-234630154E96}";
     }
 }

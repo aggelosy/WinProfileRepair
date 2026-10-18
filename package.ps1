@@ -17,11 +17,11 @@ function Write-ReleaseZip([string]$name,[object[]]$items){
   try{foreach($item in $items){[IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,$item.Source,$item.Entry,[IO.Compression.CompressionLevel]::Optimal)|Out-Null}}finally{$archive.Dispose();$stream.Dispose()}
   return $zipPath
 }
-$binaryEntries=@(foreach($name in @('WinProfileRepair.exe','README.md','LICENSE','SECURITY.md','SHA256SUMS.txt')){@{Source=(Join-Path $destination $name);Entry=$name}})
+$binaryEntries=@(foreach($name in @('WinProfileRepair.exe','README.md','LICENSE','SECURITY.md','CHANGELOG.md','ROADMAP.md','SHA256SUMS.txt')){@{Source=(Join-Path $destination $name);Entry=$name}})
 if(Test-Path -LiteralPath (Join-Path $destination 'assets\screenshot.png')){$binaryEntries+=@{Source=(Join-Path $destination 'assets\screenshot.png');Entry='assets/screenshot.png'}}
 $binary=Write-ReleaseZip ('WinProfileRepair-v'+$releaseVersion+'-win-x64.zip') $binaryEntries
 $sourceRoot=(Resolve-Path -LiteralPath $PSScriptRoot).Path
-$sourceEntries=@(Get-ChildItem -LiteralPath $sourceRoot -File -Recurse -Force | Where-Object {$relative=$_.FullName.Substring($sourceRoot.Length+1);$relative -match '^(src|tests|assets|scripts|\.github)\\' -or $relative -in @('build.ps1','package.ps1','README.md','LICENSE','SECURITY.md','.gitignore','.gitattributes','CHANGELOG.md')} | ForEach-Object {@{Source=$_.FullName;Entry=('WinProfileRepair/'+$_.FullName.Substring($sourceRoot.Length+1).Replace('\','/'))}})
+$sourceEntries=@(Get-ChildItem -LiteralPath $sourceRoot -File -Recurse -Force | Where-Object {$relative=$_.FullName.Substring($sourceRoot.Length+1);$relative -match '^(src|tests|assets|scripts|\.github)\\' -or $relative -in @('build.ps1','package.ps1','README.md','LICENSE','SECURITY.md','.gitignore','.gitattributes','CHANGELOG.md','ROADMAP.md')} | ForEach-Object {@{Source=$_.FullName;Entry=('WinProfileRepair/'+$_.FullName.Substring($sourceRoot.Length+1).Replace('\','/'))}})
 $source=Write-ReleaseZip ('WinProfileRepair-v'+$releaseVersion+'-source.zip') $sourceEntries
 Get-FileHash -LiteralPath (Join-Path $destination 'WinProfileRepair.exe'),$binary,$source -Algorithm SHA256 | ForEach-Object {$_.Hash+'  '+[IO.Path]::GetFileName($_.Path)} | Set-Content -LiteralPath (Join-Path $destination 'SHA256SUMS.txt') -Encoding ASCII
 Write-Output $binary
