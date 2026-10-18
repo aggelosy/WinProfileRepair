@@ -2,7 +2,7 @@
 
 WinProfileRepair is evolving toward broad Windows profile diagnosis and guided recovery. Each module needs documented evidence, a defined scope, explicit limitations, and tests before repair is offered. These plans are not claims of current capability or release dates.
 
-## Workspace foundation: 0.3 development preview
+## Workspace foundation: 0.3 preview
 
 - Overview, Diagnostics, Repair history, Backups, and Settings.
 - Existing guarded icon-registration, stale-record, and shortcut repairs.

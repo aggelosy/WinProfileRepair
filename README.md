@@ -4,13 +4,13 @@ A Windows desktop workspace for diagnosing profile problems and applying a limit
 
 Made by Aggelos Yiannakou · 2026
 
-**Development preview: 0.3.0-preview.** The Workspace layout adds Overview, Diagnostics, Repair history, Backups, and Settings. Expanded shell and startup/environment diagnostics are read-only. The original repair permissions and backup format remain unchanged.
+**Current preview: [0.3.0-preview](https://github.com/aggelosy/WinProfileRepair/releases/tag/v0.3.0-preview).** The Workspace layout adds Overview, Diagnostics, Repair history, Backups, and Settings. Expanded shell and startup/environment diagnostics are read-only. The original repair permissions and backup format remain unchanged.
 
 ![WinProfileRepair desktop interface](assets/screenshot.png)
 
 The screenshot uses illustrative findings. The application starts with an empty workspace until you choose to scan.
 
-**Preview:** the target platform is Windows 10/11 x64 with .NET Framework 4.8. This first version has been evaluated on one Windows machine. Broader compatibility needs independent testing. It is not a complete Windows health check or an uninstaller.
+**Preview:** the target platform is Windows 10/11 x64 with .NET Framework 4.8. This preview has been evaluated on one Windows machine. Broader compatibility needs independent testing. It is not a complete Windows health check or an uninstaller.
 
 The application starts without scanning or changing anything. Scan results include the evidence for each finding. Repairs require an explicit selection, a review dialog, and a backup. Findings that need manual review are shown separately and cannot be selected for repair.
 

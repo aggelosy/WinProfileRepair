@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0-preview (development)
+## 0.3.0-preview
 
 - Implemented the selected Workspace layout with Overview, Diagnostics, Repair history, Backups, and session Settings.
 - Added structured evidence, proposed changes, backup/undo conditions, and verification guidance in the inspector.
